@@ -4,32 +4,37 @@ from math import *
 import matplotlib.pyplot as plt
 
 
-def convolution(impulse_response_func, signal_func, t_tot=10, t_delta=0.01):
+def conv(impulse_response_list, signal_list):
     '''
-    Given two functions with parameter 't' for time, returns a list of values representing the
-    signal response over time
-    :param impulse_response_func: Impulse response function with parameter 't' for time
-    :param signal_func: Input Signal function with parameter 't' for time
-    :param t_tot: Total time to convolute over
-    :param t_delta: Delta time between discrete points in time (d_Tau)
+    Convolves two lists of values
+    :param impulse_response_func: Impulse response function with parameter
+    :param signal_func: Input Signal function with parameter
     :return: List of convoluted values over time
     '''
 
-    # Note, adding cushion 0 to beginning and an extra point at the end to make trapezoid method easier
-    impulse_reponse_vals = [impulse_response_func(t * t_delta) for t in range(int(t_tot/t_delta + 1))]
-    impulse_reponse_vals.insert(0, 0)
+    convolution = [0 for t in range(int(len(impulse_response_list) + len(signal_list) - 1))]
 
-    signal_vals = [signal_func(t * t_delta) for t in range(int(t_tot/t_delta) + 1)]
-    signal_vals.insert(0, 0)
+    for impulse_i in range(len(impulse_response_list)):
+        for signal_i in range(len(signal_list)):
+            convolution[impulse_i + signal_i] += impulse_response_list[impulse_i] * signal_list[signal_i]
 
-    convolution = [0 for t in range(int(t_tot/t_delta))]
+    return convolution
 
-    area = 0
-    for num_points_to_use in range(int(t_tot/t_delta)):
-        for index in range(num_points_to_use + 1):
-            area = area + (signal_vals[index] + signal_vals[index + 2]) * (impulse_reponse_vals[num_points_to_use - index] + impulse_reponse_vals[num_points_to_use - index + 2]) * t_delta / 4
-        convolution[num_points_to_use] = area
-        area = 0
+
+def circular_convolution_lists(impulse_response_list, signal_list):
+    lengths = [len(impulse_response_list), len(signal_list)]
+    if lengths[1] > lengths[0]:
+        short_list = impulse_response_list
+        long_list = signal_list
+    else:
+        short_list = signal_list
+        long_list = impulse_response_list
+
+    convolution = [0 for i in range(int(max(lengths)))]
+
+    for i in range(len(convolution)):
+        for j in range(len(short_list)):
+            convolution[i] += long_list[i - j] * short_list[j]
 
     return convolution
 
@@ -54,18 +59,65 @@ def test_decay(t):
     return exp(-t)
 
 
+def sinc(x):
+    '''
+    It's the sinc function [sin(x) / x]
+    :param x: Input x
+    :return: Sinc function at x
+    '''
+    if x:
+        return sin(x) / x
+    return 1
+
+
+def raised_cosine_filter(t, beta, T):
+    '''
+    Returns a digital raised cosine filter based on given beta and T
+    :param t: Time input for the impulse response
+    :param beta: Raised Cosine Roll-off Factor
+    :param T: Reciprocal of the symbol rate (the period)
+    :return: Impulse response at time 't'
+    '''
+    if not beta == 0 and (t == (T / 2 / beta) or t == -(T / 2 / beta)):
+        return pi * sinc(pi / 2 / beta) / 4 / T
+    return sinc(t * pi / T) * cos(pi * beta * t / T) / T / (1 - (2 * beta * t / T)**2)
+
+
+def bit_stream(t_tot, t_delta, T, bits):
+    bit_stream_out = [0 for t in range(int(t_tot / t_delta))]
+    count = 0
+    done = False
+    for bit in bits:
+        for i in range(int(count * T / t_delta), int((count + 1) * T / t_delta)):
+            if i == len(bit_stream_out):
+                done = True
+                break
+            bit_stream_out[i] = bit
+
+        count += 1
+        if done:
+            break
+
+    return bit_stream_out
+
+
+def example_circular_convolution():
+    signal = [2, 2]
+    channel = [1, 1, -1]
+    circular = circular_convolution_lists(signal, channel)
+    print(circular)
+
+
+def example_convolution():
+    signal = [1, 1, 1, 1, 1, 1, 1, 1]
+    channel = [1, 1, 1, 1, 1, 1, 1, 1]
+    convolve = conv(signal, channel)
+    print(convolve)
+
+
 if __name__ == "__main__":
-    t_tot = 10
-    t_delta = 0.01
-    times = [t * t_delta for t in range(int(t_tot/t_delta))]
+    example_convolution()
 
-    plt.plot(times, [test_rect(t * t_delta) for t in range(int(t_tot/t_delta))])
-    plt.plot(times, convolution(test_rect, test_rect, t_tot=t_tot, t_delta=t_delta))
-    plt.legend(["Signal/Impulse Response", "Convolution"])
-    plt.show()
 
-    plt.plot(times, [test_rect(t * t_delta) for t in range(int(t_tot/t_delta))])
-    plt.plot(times, [test_decay(t * t_delta) for t in range(int(t_tot/t_delta))])
-    plt.plot(times, convolution(test_rect, test_decay, t_tot=t_tot, t_delta=t_delta))
-    plt.legend(["Signal", "Impulse Response", "Convolution"])
-    plt.show()
+
+
